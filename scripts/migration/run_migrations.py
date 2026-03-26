@@ -63,7 +63,8 @@ def get_client(env: str, host: str | None = None) -> clickhouse_connect.driver.C
 def ensure_migration_table(client: clickhouse_connect.driver.Client) -> None:
     """Garante que a tabela de controle de migrations existe."""
     client.command(f"CREATE DATABASE IF NOT EXISTS {MIGRATION_DB}")
-    client.command(f"""
+    client.command(
+        f"""
         CREATE TABLE IF NOT EXISTS {MIGRATION_DB}.{MIGRATION_TABLE}
         (
             migration_id    String,
@@ -75,16 +76,19 @@ def ensure_migration_table(client: clickhouse_connect.driver.Client) -> None:
         )
         ENGINE = MergeTree()
         ORDER BY (applied_at, migration_id)
-    """)
+    """
+    )
 
 
 def get_applied_migrations(client: clickhouse_connect.driver.Client) -> set[str]:
     """Retorna IDs das migrations já aplicadas com sucesso."""
-    result = client.query(f"""
+    result = client.query(
+        f"""
         SELECT migration_id
         FROM {MIGRATION_DB}.{MIGRATION_TABLE}
         WHERE success = 1
-    """)
+    """
+    )
     return {row[0] for row in result.result_rows}
 
 

@@ -183,14 +183,16 @@ def vendas_ingestao_diaria():
             password=os.getenv("CLICKHOUSE_PASSWORD", "clickhouse"),
         )
 
-        result = client.query("""
+        result = client.query(
+            """
             SELECT
                 count() AS total_hoje,
                 max(data_venda) AS ultima_data,
                 dateDiff('hour', max(_inserted_at), now()) AS horas_atras
             FROM analytics.fact_vendas
             WHERE data_venda = today() - 1
-        """)
+        """
+        )
 
         row = result.first_row
         total, ultima_data, horas = row[0], row[1], row[2]
