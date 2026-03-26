@@ -1,3 +1,6 @@
+# ─── Configurações Internas Claude Code ─────────────────────────────
+.claude/
+
 # ─── Segredos e Configurações Locais ────────────────────────────────
 .env
 .env.local
