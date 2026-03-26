@@ -1,0 +1,89 @@
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | \.ruff_cache
+  | __pycache__
+  | dbt/target
+  | dbt/dbt_packages
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "TID",  # flake8-tidy-imports
+    "LOG",  # flake8-logging
+    "G",    # flake8-logging-format
+]
+ignore = [
+    "E501",   # linha longa (black cuida disso)
+    "B008",   # chamadas de função em argumentos padrão
+    "B905",   # zip sem strict= (Airflow compat)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["dags", "scripts"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+warn_return_any = true
+warn_unused_ignores = true
+exclude = [
+    "dbt/",
+    "reports/",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = """
+    --tb=short
+    --strict-markers
+    -q
+"""
+markers = [
+    "unit: Testes unitários (sem IO externo)",
+    "integration: Testes de integração (requer stack rodando)",
+    "slow: Testes lentos (pulados por padrão em CI rápido)",
+    "dag: Testes específicos de DAGs Airflow",
+]
+
+[tool.coverage.run]
+source = ["dags", "scripts"]
+omit = [
+    "*/tests/*",
+    "*/migrations/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "pass",
+]

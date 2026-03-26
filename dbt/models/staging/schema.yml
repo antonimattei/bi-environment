@@ -1,0 +1,53 @@
+version: 2
+
+sources:
+  - name: erp_raw
+    description: "Dados brutos ingeridos do ERP via Airflow"
+    database: raw
+    schema: raw
+    tables:
+      - name: vendas
+        description: "Transações de venda brutas do ERP"
+        freshness:
+          warn_after: {count: 12, period: hour}
+          error_after: {count: 24, period: hour}
+        loaded_at_field: _inserted_at
+
+models:
+  - name: stg_erp__vendas
+    description: "Vendas normalizadas do ERP — staging layer"
+    meta:
+      owner: time-bi
+      layer: staging
+      source: ERP
+    columns:
+      - name: venda_id
+        description: "Identificador único da transação de venda"
+        tests:
+          - not_null
+          - unique
+
+      - name: cliente_id
+        description: "FK para dim_clientes"
+        tests:
+          - not_null
+
+      - name: produto_id
+        description: "FK para dim_produtos"
+        tests:
+          - not_null
+
+      - name: loja_id
+        description: "FK para dim_lojas"
+        tests:
+          - not_null
+
+      - name: data_venda
+        description: "Data da transação (sem hora)"
+        tests:
+          - not_null
+
+      - name: valor_liquido
+        description: "Valor após descontos — sempre >= 0"
+        tests:
+          - not_null

@@ -1,0 +1,158 @@
+version: "3.9"
+
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.9.2-python3.11
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-""}
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-"dev-secret-key"}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: 10
+    AIRFLOW__LOGGING__LOGGING_LEVEL: INFO
+    AIRFLOW_CONN_CLICKHOUSE_DEFAULT: "clickhousedb://clickhouse:clickhouse@clickhouse:8123/analytics"
+    PYTHONPATH: /opt/airflow
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./dbt:/opt/airflow/dbt
+    - ./scripts:/opt/airflow/scripts
+    - ./tests:/opt/airflow/tests
+    - airflow-logs:/opt/airflow/logs
+    - airflow-plugins:/opt/airflow/plugins
+  depends_on:
+    postgres:
+      condition: service_healthy
+  networks:
+    - bi-network
+
+services:
+  # ─── PostgreSQL (metastore Airflow + Superset) ───────────────────────
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-airflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+    networks:
+      - bi-network
+
+  # ─── ClickHouse ───────────────────────────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clickhouse}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./docker/clickhouse/config.xml:/etc/clickhouse-server/config.d/custom.xml
+      - ./docker/clickhouse/users.xml:/etc/clickhouse-server/users.d/custom.xml
+      - ./scripts/migration:/docker-entrypoint-initdb.d
+    ports:
+      - "8123:8123"   # HTTP
+      - "9000:9000"   # Native
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      retries: 5
+    networks:
+      - bi-network
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  # ─── Airflow: Init ────────────────────────────────────────────────────
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "
+        airflow db migrate &&
+        airflow users create --role Admin --username admin --password admin
+          --email admin@dev.local --firstname Admin --lastname User
+      "
+    restart: on-failure
+
+  # ─── Airflow: Webserver ───────────────────────────────────────────────
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      retries: 5
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ─── Airflow: Scheduler ───────────────────────────────────────────────
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      retries: 5
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ─── Redis (cache Superset) ───────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - bi-network
+
+  # ─── Apache Superset ──────────────────────────────────────────────────
+  superset:
+    build:
+      context: ./docker/superset
+      dockerfile: Dockerfile
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-"dev-superset-secret-do-not-use-in-prod"}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow}@postgres/superset
+      REDIS_URL: redis://redis:6379/0
+      SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow}@postgres/superset
+    volumes:
+      - ./docker/superset/superset_config.py:/app/pythonpath/superset_config.py
+      - ./dashboards/superset:/app/superset_home/exports
+    ports:
+      - "8088:8088"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - bi-network
+
+# ─── Volumes ──────────────────────────────────────────────────────────
+volumes:
+  postgres-data:
+  clickhouse-data:
+  airflow-logs:
+  airflow-plugins:
+  redis-data:
+
+# ─── Networks ─────────────────────────────────────────────────────────
+networks:
+  bi-network:
+    driver: bridge

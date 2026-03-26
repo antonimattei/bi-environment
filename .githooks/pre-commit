@@ -1,0 +1,106 @@
+#!/bin/bash
+# ─── Pre-commit Hook ─────────────────────────────────────────────────
+# Roda automaticamente antes de cada commit.
+# Instalação: make git-setup
+
+set -e
+
+BOLD='\033[1m'
+RED='\033[31m'
+GREEN='\033[32m'
+YELLOW='\033[33m'
+RESET='\033[0m'
+
+echo "${BOLD}🔍 Executando verificações pre-commit...${RESET}"
+
+# ─── 1. Bloqueio de secrets ──────────────────────────────────────────
+echo "  Verificando secrets..."
+STAGED_FILES=$(git diff --cached --name-only)
+
+# Checar se arquivo .env real está sendo commitado
+if echo "$STAGED_FILES" | grep -qE '^\.env$|^\.env\.prod|^\.env\.stag'; then
+    echo "${RED}❌ BLOQUEADO: Arquivo .env detectado no commit!${RESET}"
+    echo "   Arquivo: $(echo "$STAGED_FILES" | grep -E '^\.env')"
+    echo "   Use .env.example para templates."
+    exit 1
+fi
+
+# Checar padrões de secrets em arquivos Python e YAML
+for file in $(echo "$STAGED_FILES" | grep -E '\.(py|yml|yaml|json|sql)$'); do
+    if [ -f "$file" ]; then
+        if grep -qiE "(password|secret|api_key|token)\s*=\s*['\"][^'\"]{8,}" "$file" 2>/dev/null; then
+            echo "${RED}❌ POSSÍVEL SECRET em $file${RESET}"
+            echo "   Verifique se não há credenciais hardcodadas."
+            echo "   Se for falso positivo, use: git commit --no-verify"
+            exit 1
+        fi
+    fi
+done
+echo "  ${GREEN}✅ Sem secrets detectados${RESET}"
+
+# ─── 2. Verificar arquivos Python com Black ──────────────────────────
+PY_FILES=$(echo "$STAGED_FILES" | grep '\.py$' || true)
+if [ -n "$PY_FILES" ]; then
+    echo "  Verificando formatação Python..."
+    if command -v black &>/dev/null; then
+        if ! black --check --quiet $PY_FILES 2>/dev/null; then
+            echo "${YELLOW}⚠️  Arquivos precisam de formatação. Rodando black...${RESET}"
+            black $PY_FILES
+            git add $PY_FILES
+            echo "  ${GREEN}✅ Formatação aplicada e arquivos re-adicionados${RESET}"
+        else
+            echo "  ${GREEN}✅ Black: OK${RESET}"
+        fi
+    fi
+
+    # Ruff linting
+    if command -v ruff &>/dev/null; then
+        if ! ruff check --quiet $PY_FILES 2>/dev/null; then
+            echo "${RED}❌ Ruff encontrou erros de linting.${RESET}"
+            echo "   Rode: make lint"
+            exit 1
+        fi
+        echo "  ${GREEN}✅ Ruff: OK${RESET}"
+    fi
+fi
+
+# ─── 3. Validar DAGs modificadas ────────────────────────────────────
+DAG_FILES=$(echo "$STAGED_FILES" | grep '^dags/.*\.py$' || true)
+if [ -n "$DAG_FILES" ]; then
+    echo "  Validando DAGs modificadas..."
+    for dag in $DAG_FILES; do
+        if PYTHONUTF8=1 python -c "
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('dag', '$dag')
+mod = importlib.util.module_from_spec(spec)
+try:
+    spec.loader.exec_module(mod)
+    print('  OK: $dag')
+except Exception as e:
+    print('  ERRO: $dag: ' + str(e))
+    sys.exit(1)
+        " 2>&1; then
+            :
+        else
+            echo "${RED}❌ DAG com erro de importação: $dag${RESET}"
+            exit 1
+        fi
+    done
+fi
+
+# ─── 4. Mensagem de commit ──────────────────────────────────────────
+# (validação de conventional commits)
+COMMIT_MSG_FILE=".git/COMMIT_EDITMSG"
+if [ -f "$COMMIT_MSG_FILE" ]; then
+    MSG=$(cat "$COMMIT_MSG_FILE")
+    if ! echo "$MSG" | grep -qE '^(feat|fix|chore|docs|refactor|test|data|dag|ci|perf|style|revert)(\(.+\))?:'; then
+        echo "${YELLOW}⚠️  Sugestão: Use Conventional Commits${RESET}"
+        echo "   Exemplos: feat: nova dag de vendas"
+        echo "             fix: corrigir query de clientes"
+        echo "             data: adicionar tabela dim_produtos"
+        echo "             dag: pipeline erp diário"
+    fi
+fi
+
+echo ""
+echo "${BOLD}${GREEN}✅ Pre-commit: todos os checks passaram!${RESET}"

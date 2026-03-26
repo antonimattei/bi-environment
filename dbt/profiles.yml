@@ -1,0 +1,67 @@
+config:
+  send_anonymous_usage_stats: false
+  partial_parse: true
+
+# ─── Perfil Local ────────────────────────────────────────────────────
+local:
+  target: local
+  outputs:
+    local:
+      type: clickhouse
+      schema: analytics
+      host: "{{ env_var('DBT_CLICKHOUSE_HOST', 'localhost') }}"
+      port: 8123
+      user: "{{ env_var('DBT_CLICKHOUSE_USER', 'clickhouse') }}"
+      password: "{{ env_var('DBT_CLICKHOUSE_PASSWORD', 'clickhouse') }}"
+      secure: false
+      verify: false
+      connect_timeout: 10
+      send_receive_timeout: 300
+      threads: 4
+
+# ─── Perfil CI (sem execução real) ───────────────────────────────────
+ci:
+  target: ci
+  outputs:
+    ci:
+      type: clickhouse
+      schema: analytics
+      host: localhost
+      port: 8123
+      user: clickhouse
+      password: clickhouse
+      secure: false
+      threads: 2
+
+# ─── Perfil Staging ──────────────────────────────────────────────────
+staging:
+  target: staging
+  outputs:
+    staging:
+      type: clickhouse
+      schema: analytics
+      host: "{{ env_var('DBT_CLICKHOUSE_HOST') }}"
+      port: 8123
+      user: "{{ env_var('DBT_CLICKHOUSE_USER') }}"
+      password: "{{ env_var('DBT_CLICKHOUSE_PASSWORD') }}"
+      secure: false
+      threads: 8
+      connect_timeout: 30
+      send_receive_timeout: 600
+
+# ─── Perfil Produção ─────────────────────────────────────────────────
+production:
+  target: production
+  outputs:
+    production:
+      type: clickhouse
+      schema: analytics
+      host: "{{ env_var('DBT_CLICKHOUSE_HOST') }}"
+      port: 8443
+      user: "{{ env_var('DBT_CLICKHOUSE_USER') }}"
+      password: "{{ env_var('DBT_CLICKHOUSE_PASSWORD') }}"
+      secure: true
+      verify: true
+      threads: 16
+      connect_timeout: 30
+      send_receive_timeout: 600

@@ -1,0 +1,65 @@
+name: bi_platform
+version: "1.0.0"
+config-version: 2
+
+profile: local
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# ─── Variáveis Globais ───────────────────────────────────────────────
+vars:
+  start_date: "2020-01-01"
+  data_atual: "{{ run_started_at.strftime('%Y-%m-%d') }}"
+
+# ─── Configurações por Camada ────────────────────────────────────────
+models:
+  bi_platform:
+
+    # Camada Staging: dados brutos normalizados
+    staging:
+      +materialized: view          # views por padrão (leve, sempre fresco)
+      +schema: staging
+      +tags: ["staging"]
+      +meta:
+        layer: staging
+        owner: data-engineering
+
+    # Camada Intermediate: lógica de negócio intermediária
+    intermediate:
+      +materialized: ephemeral     # CTEs inline, sem tabela física
+      +schema: intermediate
+      +tags: ["intermediate"]
+
+    # Camada Marts: tabelas analíticas finais
+    marts:
+      +materialized: table         # tabelas físicas para performance
+      +schema: analytics
+      +tags: ["marts"]
+      +meta:
+        layer: marts
+        owner: data-engineering
+      +post-hook:
+        - "{{ log('Modelo ' ~ this ~ ' atualizado em ' ~ run_started_at, info=true) }}"
+
+# ─── Snapshots ───────────────────────────────────────────────────────
+snapshots:
+  bi_platform:
+    +target_schema: snapshots
+    +strategy: timestamp
+    +updated_at: updated_at
+
+# ─── Seeds ───────────────────────────────────────────────────────────
+seeds:
+  bi_platform:
+    +schema: seeds
+    +tags: ["seed"]

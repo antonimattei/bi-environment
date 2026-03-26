@@ -1,0 +1,173 @@
+name: CD — Deploy Staging & Produção
+
+on:
+  push:
+    branches:
+      - staging
+      - main
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ──────────────────────────────────────────
+  # Deploy em STAGING (branch: staging)
+  # ──────────────────────────────────────────
+  deploy-staging:
+    name: Deploy → Staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/staging'
+    environment:
+      name: staging
+      url: https://superset.staging.empresa.com
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}
+
+      # ─── DAGs: Sincronizar com servidor Airflow staging ───
+      - name: Sync DAGs → Airflow Staging
+        run: |
+          rsync -avz --delete \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.pytest_cache' \
+            dags/ \
+            ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }}:/opt/airflow/dags/
+
+      # ─── dbt: Executar modelos em staging ───
+      - name: Run dbt → Staging
+        run: |
+          pip install dbt-core dbt-clickhouse
+          dbt deps --project-dir dbt
+          dbt run --project-dir dbt --profiles-dir dbt --profile staging --target staging
+          dbt test --project-dir dbt --profiles-dir dbt --profile staging --target staging
+        env:
+          DBT_CLICKHOUSE_HOST: ${{ secrets.STAGING_CLICKHOUSE_HOST }}
+          DBT_CLICKHOUSE_USER: ${{ secrets.STAGING_CLICKHOUSE_USER }}
+          DBT_CLICKHOUSE_PASSWORD: ${{ secrets.STAGING_CLICKHOUSE_PASSWORD }}
+
+      # ─── Migrations ClickHouse staging ───
+      - name: Run DB Migrations → Staging
+        run: |
+          python scripts/migration/run_migrations.py \
+            --env staging \
+            --host ${{ secrets.STAGING_CLICKHOUSE_HOST }}
+        env:
+          CLICKHOUSE_USER: ${{ secrets.STAGING_CLICKHOUSE_USER }}
+          CLICKHOUSE_PASSWORD: ${{ secrets.STAGING_CLICKHOUSE_PASSWORD }}
+
+      - name: Notify staging deploy
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "✅ Deploy *staging* concluído\nCommit: ${{ github.sha }}\nAutor: ${{ github.actor }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ──────────────────────────────────────────
+  # Deploy em PRODUÇÃO (branch: main)
+  # ──────────────────────────────────────────
+  deploy-production:
+    name: Deploy → Produção
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://superset.empresa.com
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
+
+      # ─── Migrations ClickHouse produção ───
+      - name: Run DB Migrations → Production
+        run: |
+          python scripts/migration/run_migrations.py \
+            --env production \
+            --host ${{ secrets.PROD_CLICKHOUSE_HOST }}
+        env:
+          CLICKHOUSE_USER: ${{ secrets.PROD_CLICKHOUSE_USER }}
+          CLICKHOUSE_PASSWORD: ${{ secrets.PROD_CLICKHOUSE_PASSWORD }}
+
+      # ─── DAGs: Deploy em produção ───
+      - name: Sync DAGs → Airflow Production
+        run: |
+          rsync -avz --delete \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            dags/ \
+            ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }}:/opt/airflow/dags/
+
+      # ─── dbt: Executar modelos em produção ───
+      - name: Run dbt → Production
+        run: |
+          pip install dbt-core dbt-clickhouse
+          dbt deps --project-dir dbt
+          dbt run --project-dir dbt --profiles-dir dbt --profile production --target production
+          dbt test --project-dir dbt --profiles-dir dbt --profile production --target production
+        env:
+          DBT_CLICKHOUSE_HOST: ${{ secrets.PROD_CLICKHOUSE_HOST }}
+          DBT_CLICKHOUSE_USER: ${{ secrets.PROD_CLICKHOUSE_USER }}
+          DBT_CLICKHOUSE_PASSWORD: ${{ secrets.PROD_CLICKHOUSE_PASSWORD }}
+
+      # ─── Tag de versão automática ───
+      - name: Create release tag
+        run: |
+          VERSION="v$(date +'%Y.%m.%d')-${GITHUB_SHA::7}"
+          git tag $VERSION
+          git push origin $VERSION
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify production deploy
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "🚀 Deploy *PRODUÇÃO* concluído\nCommit: ${{ github.sha }}\nAutor: ${{ github.actor }}\nURL: https://superset.empresa.com"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "⚠️ Deploy falhou! Iniciando rollback..."
+          git log --oneline -5
+          # Script de rollback vai aqui
+          python scripts/maintenance/rollback.py --env production

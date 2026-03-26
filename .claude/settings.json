@@ -1,0 +1,142 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(make:*)",
+      "Bash(python:*)",
+      "Bash(pytest:*)",
+      "Bash(black:*)",
+      "Bash(ruff:*)",
+      "Bash(mypy:*)",
+      "Bash(dbt:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker:*)",
+      "Bash(pip:*)",
+      "Bash(echo:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(touch:*)",
+      "Bash(curl:*)",
+      "Bash(jq:*)",
+      "Bash(yq:*)",
+      "Bash(sed:*)",
+      "Bash(awk:*)",
+      "Bash(wc:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~*)",
+      "Bash(chmod 777*)",
+      "Bash(sudo rm*)",
+      "Bash(> /dev/*)",
+      "Bash(*DROP DATABASE*)",
+      "Bash(*DROP TABLE*)",
+      "Bash(*TRUNCATE*)",
+      "Bash(*DELETE FROM* WHERE*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '🚀 BI Platform session iniciada' && echo \"📅 $(date '+%Y-%m-%d %H:%M:%S')\" && git branch --show-current 2>/dev/null | xargs -I{} echo '🌿 Branch: {}'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "BRANCH=$(git branch --show-current 2>/dev/null); if [ \"$BRANCH\" = \"main\" ] || [ \"$BRANCH\" = \"staging\" ]; then echo '{\"block\": true, \"message\": \"❌ BLOQUEADO: Edições diretas em main/staging são proibidas. Crie uma branch feature/xxx ou hotfix/xxx.\"}' >&2; exit 2; fi",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); CMD=$(echo \"$INPUT\" | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('command',''))\" 2>/dev/null); if echo \"$CMD\" | grep -qiE '(DROP DATABASE|DROP TABLE|TRUNCATE TABLE|DELETE FROM.*WHERE 1=1)'; then echo '{\"block\": true, \"message\": \"❌ BLOQUEADO: Comando destrutivo de banco de dados detectado. Requer aprovação manual.\"}' >&2; exit 2; fi; if echo \"$CMD\" | grep -qE '^git push.*(main|staging|production)'; then echo '{\"block\": true, \"message\": \"❌ BLOQUEADO: Push direto para branch protegida. Use Pull Request.\"}' >&2; exit 2; fi",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('file_path',''))\" 2>/dev/null); if echo \"$FILE\" | grep -qE '(\\.env$|\\.env\\.prod|\\.env\\.staging)'; then echo '{\"block\": true, \"message\": \"❌ BLOQUEADO: Arquivo .env detectado. Use .env.example para templates e nunca escreva credenciais reais.\"}' >&2; exit 2; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('file_path',''))\" 2>/dev/null); if echo \"$FILE\" | grep -qE '\\.py$'; then echo \"🔍 Verificando Python: $FILE\"; black --check --quiet \"$FILE\" 2>/dev/null && echo '✅ Black: OK' || echo '⚠️  Black: precisa formatação (rode: make fmt)'; ruff check --quiet \"$FILE\" 2>/dev/null && echo '✅ Ruff: OK' || echo '⚠️  Ruff: issues encontrados (rode: make lint)'; fi; if echo \"$FILE\" | grep -qE '\\.sql$'; then echo \"🔍 SQL salvo: $FILE\"; fi",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('file_path',''))\" 2>/dev/null); if echo \"$FILE\" | grep -qiE '(password|secret|api_key|token|credential)' && ! echo \"$FILE\" | grep -qE '(\\.example|\\.template|CLAUDE\\.md|settings\\.json)'; then echo '{\"block\": false, \"message\": \"⚠️ ATENÇÃO: Nome do arquivo sugere credencial sensível. Verifique se não está commitando dados reais.\"}'; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse:Bash": [
+      {
+        "matcher": "pytest",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '📊 Testes concluídos. Verifique o relatório de cobertura.'",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '✅ Sessão Claude Code finalizada. Lembre de: 1) Commitar mudanças pendentes  2) Abrir PR se necessário  3) Rodar testes antes do merge'",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  },
+  "env": {
+    "PYTHONPATH": "${workspaceFolder}",
+    "DBT_PROFILES_DIR": "${workspaceFolder}/dbt",
+    "AIRFLOW_HOME": "${workspaceFolder}/.airflow"
+  }
+}
