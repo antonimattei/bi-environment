@@ -23,7 +23,7 @@ SQLALCHEMY_DATABASE_URI = os.getenv(
 # ─── Cache (Redis) ────────────────────────────────────────────────────
 CACHE_CONFIG = {
     "CACHE_TYPE": "RedisCache",
-    "CACHE_DEFAULT_TIMEOUT": 300,       # 5 minutos padrão
+    "CACHE_DEFAULT_TIMEOUT": 300,  # 5 minutos padrão
     "CACHE_KEY_PREFIX": "superset_",
     "CACHE_REDIS_URL": os.getenv("REDIS_URL", "redis://redis:6379/0"),
 }
@@ -31,7 +31,7 @@ CACHE_CONFIG = {
 # Cache separado para dados (queries dos dashboards)
 DATA_CACHE_CONFIG = {
     "CACHE_TYPE": "RedisCache",
-    "CACHE_DEFAULT_TIMEOUT": 600,       # 10 minutos para dados
+    "CACHE_DEFAULT_TIMEOUT": 600,  # 10 minutos para dados
     "CACHE_KEY_PREFIX": "superset_data_",
     "CACHE_REDIS_URL": os.getenv("REDIS_URL", "redis://redis:6379/1"),
 }
@@ -47,14 +47,14 @@ SUPERSET_WEBSERVER_TIMEOUT = 300
 
 # ─── Features ─────────────────────────────────────────────────────────
 FEATURE_FLAGS = {
-    "ENABLE_TEMPLATE_PROCESSING": True,     # Jinja2 em SQL ({{ from_dttm }})
-    "DASHBOARD_NATIVE_FILTERS": True,       # Filtros nativos modernos
-    "DASHBOARD_CROSS_FILTERS": True,        # Cross-filtering entre charts
-    "ALERT_REPORTS": True,                  # Alertas e relatórios agendados
-    "DRILL_BY": True,                       # Drill-down por dimensão
-    "EMBEDDABLE_CHARTS": True,              # Embed de charts via iFrame
-    "HORIZONTAL_FILTER_BAR": True,          # Filtros horizontais
-    "SSH_TUNNELING": False,                 # Desabilitado por segurança
+    "ENABLE_TEMPLATE_PROCESSING": True,  # Jinja2 em SQL ({{ from_dttm }})
+    "DASHBOARD_NATIVE_FILTERS": True,  # Filtros nativos modernos
+    "DASHBOARD_CROSS_FILTERS": True,  # Cross-filtering entre charts
+    "ALERT_REPORTS": True,  # Alertas e relatórios agendados
+    "DRILL_BY": True,  # Drill-down por dimensão
+    "EMBEDDABLE_CHARTS": True,  # Embed de charts via iFrame
+    "HORIZONTAL_FILTER_BAR": True,  # Filtros horizontais
+    "SSH_TUNNELING": False,  # Desabilitado por segurança
 }
 
 # ─── Alertas e Reports ────────────────────────────────────────────────
