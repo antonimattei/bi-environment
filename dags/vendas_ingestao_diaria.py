@@ -195,7 +195,9 @@ def vendas_ingestao_diaria():
         row = result.first_row
         total, ultima_data, horas = row[0], row[1], row[2]
 
-        logger.info(f"Freshness check: {total} registros, última data: {ultima_data}, {horas}h atrás")
+        logger.info(
+            f"Freshness check: {total} registros, última data: {ultima_data}, {horas}h atrás"
+        )
 
         if horas > 3:
             raise ValueError(f"Dados com mais de 3h de atraso: {horas}h")

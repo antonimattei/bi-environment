@@ -124,7 +124,9 @@ def apply_migration(
 
     try:
         # Executar cada statement separadamente (ClickHouse não suporta multi-statement)
-        statements = [s.strip() for s in sql.split(";") if s.strip() and not s.strip().startswith("--")]
+        statements = [
+            s.strip() for s in sql.split(";") if s.strip() and not s.strip().startswith("--")
+        ]
         for stmt in statements:
             if stmt:
                 client.command(stmt)
@@ -132,8 +134,24 @@ def apply_migration(
         # Registrar sucesso
         client.insert(
             f"{MIGRATION_DB}.{MIGRATION_TABLE}",
-            [[migration_id, migration_file.name, checksum, datetime.utcnow(), "migration_runner", 1]],
-            column_names=["migration_id", "filename", "checksum", "applied_at", "applied_by", "success"],
+            [
+                [
+                    migration_id,
+                    migration_file.name,
+                    checksum,
+                    datetime.utcnow(),
+                    "migration_runner",
+                    1,
+                ]
+            ],
+            column_names=[
+                "migration_id",
+                "filename",
+                "checksum",
+                "applied_at",
+                "applied_by",
+                "success",
+            ],
         )
         logger.info(f"  ✅ {migration_file.name}")
         return True
@@ -143,8 +161,24 @@ def apply_migration(
         # Registrar falha
         client.insert(
             f"{MIGRATION_DB}.{MIGRATION_TABLE}",
-            [[migration_id, migration_file.name, checksum, datetime.utcnow(), "migration_runner", 0]],
-            column_names=["migration_id", "filename", "checksum", "applied_at", "applied_by", "success"],
+            [
+                [
+                    migration_id,
+                    migration_file.name,
+                    checksum,
+                    datetime.utcnow(),
+                    "migration_runner",
+                    0,
+                ]
+            ],
+            column_names=[
+                "migration_id",
+                "filename",
+                "checksum",
+                "applied_at",
+                "applied_by",
+                "success",
+            ],
         )
         return False
 
