@@ -67,7 +67,7 @@ def vendas_ingestao_diaria():
         from airflow.hooks.base import BaseHook
 
         conn = BaseHook.get_connection("erp_postgres")
-        logger.info(f"Extraindo vendas de {conn.host}")
+        logger.info("Extraindo vendas de %s", conn.host)
 
         # Simulação — substituir por query real ao ERP
         dados = [
@@ -84,7 +84,7 @@ def vendas_ingestao_diaria():
             }
         ]
 
-        logger.info(f"Extraídas {len(dados)} transações")
+        logger.info("Extraídas %d transações", len(dados))
         return {"dados": dados, "count": len(dados)}
 
     @task()
@@ -106,7 +106,7 @@ def vendas_ingestao_diaria():
         if len(ids) != len(set(ids)):
             raise ValueError("IDs duplicados detectados na extração")
 
-        logger.info(f"✅ Validação OK — {len(dados)} registros válidos")
+        logger.info("Validação OK — %d registros válidos", len(dados))
         return extracao
 
     @task()
@@ -132,7 +132,7 @@ def vendas_ingestao_diaria():
         rows = [[row[c] for c in columns] for row in dados]
 
         client.insert("raw.vendas", rows, column_names=columns)
-        logger.info(f"✅ {len(rows)} linhas inseridas em raw.vendas")
+        logger.info("%d linhas inseridas em raw.vendas", len(rows))
         return len(rows)
 
     @task.bash()
@@ -198,7 +198,10 @@ def vendas_ingestao_diaria():
         total, ultima_data, horas = row[0], row[1], row[2]
 
         logger.info(
-            f"Freshness check: {total} registros, última data: {ultima_data}, {horas}h atrás"
+            "Freshness check: %d registros, última data: %s, %sh atrás",
+            total,
+            ultima_data,
+            horas,
         )
 
         if horas > 3:

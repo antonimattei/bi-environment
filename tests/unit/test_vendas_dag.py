@@ -4,8 +4,6 @@ Testes unitários para a DAG vendas_ingestao_diaria.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 
@@ -16,7 +14,7 @@ class TestValicarDados:
         """Deve passar com dados válidos."""
         from dags.vendas_ingestao_diaria import vendas_ingestao_diaria
 
-        dag = vendas_ingestao_diaria()
+        vendas_ingestao_diaria()
         # Instanciar a task diretamente para teste unitário
         extracao = {
             "dados": [
@@ -73,7 +71,6 @@ class TestDAGStructure:
 
     def test_dag_importa_sem_erros(self):
         """A DAG deve importar sem lançar exceções."""
-        import importlib
         import sys
 
         # Remove do cache se já importado

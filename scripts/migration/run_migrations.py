@@ -56,7 +56,7 @@ def get_client(env: str, host: str | None = None) -> clickhouse_connect.driver.C
     if env not in configs:
         raise ValueError(f"Ambiente inválido: {env}. Use: {list(configs.keys())}")
 
-    logger.info(f"Conectando ao ClickHouse [{env}]: {configs[env]['host']}")
+    logger.info("Conectando ao ClickHouse [%s]: %s", env, configs[env]["host"])
     return clickhouse_connect.get_client(**configs[env])
 
 
@@ -95,7 +95,7 @@ def get_applied_migrations(client: clickhouse_connect.driver.Client) -> set[str]
 def get_pending_migrations() -> list[Path]:
     """Retorna lista de arquivos de migration pendentes, em ordem."""
     if not MIGRATIONS_DIR.exists():
-        logger.warning(f"Diretório de migrations não encontrado: {MIGRATIONS_DIR}")
+        logger.warning("Diretório de migrations não encontrado: %s", MIGRATIONS_DIR)
         return []
 
     migrations = sorted(
@@ -120,10 +120,10 @@ def apply_migration(
     checksum = get_file_checksum(migration_file)
     sql = migration_file.read_text(encoding="utf-8")
 
-    logger.info(f"  Aplicando: {migration_file.name}")
+    logger.info("  Aplicando: %s", migration_file.name)
 
     if dry_run:
-        logger.info(f"  [DRY RUN] Seria executado:\n{sql[:200]}...")
+        logger.info("  [DRY RUN] Seria executado:\n%s...", sql[:200])
         return True
 
     try:
@@ -157,11 +157,11 @@ def apply_migration(
                 "success",
             ],
         )
-        logger.info(f"  ✅ {migration_file.name}")
+        logger.info("  OK: %s", migration_file.name)
         return True
 
     except Exception as e:
-        logger.error(f"  ❌ Falha em {migration_file.name}: {e}")
+        logger.error("  Falha em %s: %s", migration_file.name, e)
         # Registrar falha
         client.insert(
             f"{MIGRATION_DB}.{MIGRATION_TABLE}",
@@ -206,9 +206,9 @@ def run_migrations(env: str, host: str | None = None, dry_run: bool = False) -> 
         logger.info("✅ Nenhuma migration pendente.")
         return 0
 
-    logger.info(f"📦 {len(to_apply)} migration(s) pendente(s):")
+    logger.info("%d migration(s) pendente(s):", len(to_apply))
     for m in to_apply:
-        logger.info(f"  - {m.name}")
+        logger.info("  - %s", m.name)
 
     if dry_run:
         logger.info("🔍 Modo DRY RUN — nenhuma alteração será feita.")
@@ -218,10 +218,10 @@ def run_migrations(env: str, host: str | None = None, dry_run: bool = False) -> 
         if apply_migration(client, migration, dry_run=dry_run):
             success_count += 1
         else:
-            logger.error(f"❌ Migration falhou: {migration.name}. Interrompendo.")
+            logger.error("Migration falhou: %s. Interrompendo.", migration.name)
             sys.exit(1)
 
-    logger.info(f"\n🎉 {success_count} migration(s) aplicada(s) com sucesso!")
+    logger.info("\n%d migration(s) aplicada(s) com sucesso!", success_count)
     return success_count
 
 
