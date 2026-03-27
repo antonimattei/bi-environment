@@ -59,7 +59,7 @@ DEFAULT_ARGS = {
     **Owner**: time-bi@empresa.com
     """,
 )
-def vendas_ingestao_diaria():
+def vendas_ingestao_diaria() -> None:
 
     @task()
     def extrair_vendas_erp() -> dict:

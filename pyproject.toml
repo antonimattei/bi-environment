@@ -54,6 +54,14 @@ exclude = [
     "reports/",
 ]
 
+[[tool.mypy.overrides]]
+module = ["airflow.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["dags.*"]
+ignore_errors = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

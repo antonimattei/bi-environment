@@ -16,6 +16,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import clickhouse_connect
 
@@ -32,7 +33,7 @@ MIGRATION_DB = "bi_meta"
 
 def get_client(env: str, host: str | None = None) -> clickhouse_connect.driver.Client:
     """Cria cliente ClickHouse para o ambiente especificado."""
-    configs = {
+    configs: dict[str, dict[str, Any]] = {
         "local": {
             "host": host or os.getenv("CLICKHOUSE_HOST", "localhost"),
             "port": int(os.getenv("CLICKHOUSE_PORT", "8123")),
@@ -82,13 +83,11 @@ def ensure_migration_table(client: clickhouse_connect.driver.Client) -> None:
 
 def get_applied_migrations(client: clickhouse_connect.driver.Client) -> set[str]:
     """Retorna IDs das migrations já aplicadas com sucesso."""
-    result = client.query(
-        f"""
-        SELECT migration_id
-        FROM {MIGRATION_DB}.{MIGRATION_TABLE}
-        WHERE success = 1
-    """
+    # MIGRATION_DB e MIGRATION_TABLE são constantes do módulo, não input do usuário
+    query = (
+        f"SELECT migration_id FROM {MIGRATION_DB}.{MIGRATION_TABLE} WHERE success = 1"  # nosec B608
     )
+    result = client.query(query)
     return {row[0] for row in result.result_rows}
 
 
@@ -107,7 +106,7 @@ def get_pending_migrations() -> list[Path]:
 
 def get_file_checksum(path: Path) -> str:
     """Calcula MD5 do arquivo de migration."""
-    return hashlib.md5(path.read_bytes()).hexdigest()
+    return hashlib.md5(path.read_bytes(), usedforsecurity=False).hexdigest()
 
 
 def apply_migration(
